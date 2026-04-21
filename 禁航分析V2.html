@@ -1,0 +1,996 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>禁航分析 V2 · 签派放行工具</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+:root{
+  --bg:#0b1220; --panel:#111a2e; --panel2:#162039; --bd:#1f2c4a;
+  --tx:#e6edf6; --mu:#94a3b8; --ac:#39d3ff; --ac2:#7c3aed;
+  --ok:#22c55e; --warn:#f59e0b; --err:#ef4444; --hl:#fde047;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--tx);
+  font-family:-apple-system,"PingFang SC","Microsoft YaHei","Hiragino Sans GB",sans-serif;font-size:14px;line-height:1.55;}
+.container{max-width:1280px;margin:0 auto;padding:18px;}
+header{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;
+  padding-bottom:12px;border-bottom:1px solid var(--bd);}
+h1{font-size:20px;margin:0;color:var(--ac);letter-spacing:1px;}
+h1 small{color:var(--mu);font-size:12px;font-weight:normal;margin-left:10px;}
+.steps{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;}
+.step-pill{padding:6px 12px;border-radius:16px;background:var(--panel);border:1px solid var(--bd);
+  color:var(--mu);font-size:12px;cursor:pointer;user-select:none;transition:.15s;}
+.step-pill.active{background:var(--ac);color:#000;border-color:var(--ac);font-weight:600;}
+.step-pill.done{border-color:var(--ok);color:var(--ok);}
+.panel{background:var(--panel);border:1px solid var(--bd);border-radius:8px;padding:16px;margin-bottom:14px;}
+.panel h2{font-size:15px;margin:0 0 10px;color:var(--ac);}
+.panel h2 .badge{font-size:11px;padding:2px 8px;border-radius:10px;background:var(--panel2);color:var(--mu);margin-left:8px;font-weight:normal;}
+textarea{width:100%;min-height:160px;background:#0a1126;color:var(--tx);border:1px solid var(--bd);
+  border-radius:6px;padding:10px;font-family:var(--mono);font-size:12px;resize:vertical;}
+textarea:focus{outline:none;border-color:var(--ac);}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:8px 0;}
+.row label{color:var(--mu);font-size:12px;min-width:90px;}
+input[type=text],input[type=number]{background:#0a1126;color:var(--tx);border:1px solid var(--bd);
+  border-radius:6px;padding:6px 10px;font-family:var(--mono);font-size:13px;width:120px;}
+input:focus{outline:none;border-color:var(--ac);}
+.btn{background:var(--ac);color:#000;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;
+  font-weight:600;font-size:13px;transition:.15s;}
+.btn:hover{background:#5dd9ff;}
+.btn:disabled{opacity:.45;cursor:not-allowed;}
+.btn-outline{background:transparent;color:var(--ac);border:1px solid var(--ac);}
+.btn-outline:hover{background:rgba(57,211,255,.1);}
+.btn-mini{padding:4px 10px;font-size:12px;}
+.btn-danger{background:var(--err);color:#fff;}
+.btn-warn{background:var(--warn);color:#000;}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;}
+
+/* NOTAM blocks */
+.notam-block{border:1px solid var(--bd);border-radius:6px;padding:10px;margin:8px 0;background:var(--panel2);}
+.notam-block .nb-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;flex-wrap:wrap;gap:6px;}
+.notam-block .nb-id{font-family:var(--mono);font-weight:600;color:var(--ac);font-size:13px;}
+.notam-block .nb-time{font-family:var(--mono);color:var(--mu);font-size:12px;}
+.seg{padding:6px 10px;margin:4px 0;border-radius:4px;background:#0a1126;border-left:3px solid var(--bd);font-size:12px;}
+.seg.affected{border-left-color:var(--err);background:rgba(239,68,68,.08);}
+.seg.unmatched{border-left-color:var(--warn);}
+.seg-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;}
+.seg-airway{font-family:var(--mono);font-weight:600;color:var(--hl);}
+.seg-tag{font-size:10px;padding:1px 6px;border-radius:8px;background:var(--bd);color:var(--mu);}
+.seg-tag.ok{background:var(--ok);color:#000;}
+.seg-tag.no{background:var(--bd);color:var(--mu);}
+.seg-tag.bad{background:var(--err);color:#fff;}
+.chips{display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;}
+.chip{padding:2px 8px;border-radius:10px;background:#0f1730;color:var(--mu);font-family:var(--mono);font-size:11px;border:1px solid var(--bd);}
+.chip.hit{background:var(--hl);color:#000;border-color:var(--hl);font-weight:600;}
+.chip.entry{background:var(--ok);color:#000;font-weight:600;}
+.chip.exit{background:#a78bfa;color:#000;font-weight:600;}
+
+/* Plans */
+.plan-card{background:var(--panel2);border:1px solid var(--bd);border-radius:6px;padding:10px;margin:8px 0;}
+.plan-head{display:flex;justify-content:space-between;align-items:center;font-family:var(--mono);font-size:13px;margin-bottom:6px;flex-wrap:wrap;gap:8px;}
+.plan-head .pname{color:var(--ac);font-weight:600;}
+.plan-stat{font-size:11px;color:var(--mu);}
+
+/* Result cards */
+.summary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin-bottom:10px;}
+.sum-card{background:var(--panel2);border:1px solid var(--bd);border-radius:8px;padding:12px;}
+.sum-card .lab{font-size:11px;color:var(--mu);text-transform:uppercase;letter-spacing:.5px;}
+.sum-card .val{font-size:22px;font-family:var(--mono);font-weight:600;margin-top:4px;}
+.sum-card.ok .val{color:var(--ok);}
+.sum-card.bad .val{color:var(--err);}
+.sum-card.warn .val{color:var(--warn);}
+
+/* Tables */
+table{width:100%;border-collapse:collapse;font-size:12px;margin:6px 0;}
+th,td{padding:6px 8px;border-bottom:1px solid var(--bd);text-align:left;font-family:var(--mono);}
+th{color:var(--mu);font-weight:normal;background:var(--panel2);font-family:-apple-system,"PingFang SC",sans-serif;font-size:11px;text-transform:uppercase;}
+tr.bad{background:rgba(239,68,68,.06);}
+.win-pill{display:inline-block;padding:2px 8px;border-radius:10px;background:var(--err);color:#fff;font-family:var(--mono);font-weight:600;font-size:11px;}
+
+/* Gantt */
+.gantt{position:relative;background:var(--panel2);border:1px solid var(--bd);border-radius:6px;padding:14px 14px 30px;margin:10px 0;overflow-x:auto;}
+.gantt-row{position:relative;height:22px;margin:6px 0;}
+.gantt-row .glabel{position:absolute;left:0;top:2px;width:120px;font-size:11px;color:var(--mu);font-family:var(--mono);}
+.gantt-track{position:absolute;left:130px;right:14px;top:0;height:22px;background:#0a1126;border-radius:3px;}
+.gantt-bar{position:absolute;top:2px;height:18px;border-radius:3px;font-size:10px;color:#000;line-height:18px;text-align:center;font-family:var(--mono);overflow:hidden;}
+.gantt-bar.notam{background:var(--err);color:#fff;}
+.gantt-bar.window{background:var(--warn);}
+.gantt-bar.transit{background:#3b82f6;color:#fff;}
+.gantt-line{position:absolute;top:-4px;bottom:-4px;width:2px;background:var(--ac);z-index:5;}
+.gantt-line::after{content:attr(data-label);position:absolute;top:-12px;left:4px;font-size:10px;color:var(--ac);white-space:nowrap;font-family:var(--mono);}
+.gantt-axis{position:absolute;left:130px;right:14px;bottom:6px;height:18px;}
+.gantt-tick{position:absolute;font-size:10px;color:var(--mu);font-family:var(--mono);transform:translateX(-50%);}
+.gantt-tick::before{content:'';position:absolute;left:50%;top:-4px;width:1px;height:4px;background:var(--mu);}
+
+/* Output report */
+.report{background:#0a1126;border:1px solid var(--bd);border-radius:6px;padding:14px;font-family:var(--mono);font-size:13px;white-space:pre-wrap;line-height:1.7;}
+.toast{position:fixed;top:20px;right:20px;background:var(--panel);border:1px solid var(--bd);border-radius:6px;padding:10px 16px;color:var(--tx);z-index:9999;animation:slide .25s;}
+.toast.error{border-color:var(--err);color:var(--err);}
+.toast.ok{border-color:var(--ok);color:var(--ok);}
+@keyframes slide{from{opacity:0;transform:translateX(20px);}to{opacity:1;transform:translateX(0);}}
+
+.hint{color:var(--mu);font-size:12px;margin:6px 0;}
+.hint code{background:#0a1126;padding:1px 6px;border-radius:3px;color:var(--ac);}
+.hide{display:none;}
+.kbd{background:#0a1126;padding:1px 6px;border-radius:3px;font-family:var(--mono);font-size:11px;border:1px solid var(--bd);}
+
+/* Print */
+@media print{
+  html,body{background:#fff;color:#000;}
+  .panel{border-color:#ccc;background:#fff;}
+  .step-pill,.actions,.btn,header > div:last-child{display:none!important;}
+  .sum-card,.notam-block,.plan-card,.report,.gantt{background:#fff;border-color:#ccc;color:#000;}
+  textarea{display:none;}
+}
+</style>
+</head>
+<body>
+<div class="container">
+<header>
+  <h1>禁航分析 V2 <small>NOTAM × CFP × 起飞窗口 · 签派放行</small></h1>
+  <div>
+    <button class="btn btn-outline btn-mini" onclick="loadDemo()">加载示例</button>
+    <button class="btn btn-outline btn-mini" onclick="resetAll()">重置</button>
+  </div>
+</header>
+
+<div class="steps">
+  <div class="step-pill active" id="pill1" onclick="goStep(1)">① 粘贴 NOTAM</div>
+  <div class="step-pill" id="pill2" onclick="goStep(2)">② 粘贴飞行计划</div>
+  <div class="step-pill" id="pill3" onclick="goStep(3)">③ 自动匹配</div>
+  <div class="step-pill" id="pill4" onclick="goStep(4)">④ 起飞时间 / 裕度</div>
+  <div class="step-pill" id="pill5" onclick="goStep(5)">⑤ 计算 / 输出</div>
+</div>
+
+<!-- Step 1: NOTAM -->
+<div class="panel" id="step1">
+  <h2>① 粘贴 NOTAM 全文 <span class="badge">支持多条 NOTAM 一次粘贴</span></h2>
+  <p class="hint">把所有相关情报区的禁航通告一次性贴进来即可（如 ZLHW、ZWUQ 多条混在一起）。系统会按 NOTAM 编号拆分成独立的禁航块，每块用各自的 B/C 时间计算。</p>
+  <textarea id="notamInput" placeholder="C1149/26 ZLHW&#10;B)2026/04/10 1410 C)2026/04/10 1450&#10;E)下列航路( 线) 段禁航:&#10;1.W192 航线 ( RUSDI - TUSLI ）段,&#10;2.B215 航线 ( IBANO - NUKTI ）段&#10;..."></textarea>
+  <div class="row">
+    <label>时区口径</label>
+    <select id="tzMode" style="background:#0a1126;color:var(--tx);border:1px solid var(--bd);border-radius:6px;padding:6px 10px;">
+      <option value="auto" selected>自动（C/D 系列按北京时间，A 系列按 UTC+8）</option>
+      <option value="utc">全部按 UTC（解析时 +8 小时）</option>
+      <option value="bj">全部按北京时间（不转换）</option>
+    </select>
+  </div>
+  <div class="actions">
+    <button class="btn" onclick="doParseNotam()">解析 NOTAM ▶</button>
+  </div>
+  <div id="notamPreview"></div>
+</div>
+
+<!-- Step 2: CFP -->
+<div class="panel hide" id="step2">
+  <h2>② 粘贴飞行计划（CFP） <span class="badge">支持一次粘贴多个航班</span></h2>
+  <p class="hint">每段以 <code>PLAN</code> 开头算一个航班；可以同时贴 1 个或多个航班的计划。</p>
+  <textarea id="cfpInput" placeholder="PLAN 5074   ZGHA TO ZWTL  L320 ..."></textarea>
+  <div class="actions">
+    <button class="btn btn-outline" onclick="goStep(1)">◀ 上一步</button>
+    <button class="btn" onclick="doParseCfp()">解析飞行计划 ▶</button>
+  </div>
+  <div id="cfpPreview"></div>
+</div>
+
+<!-- Step 3: Match -->
+<div class="panel hide" id="step3">
+  <h2>③ 自动匹配 受影响段</h2>
+  <p class="hint">规则：每个禁航段的端点用航路库展开为完整航段；然后与每个 CFP 的航路点取交集。<b>命中 ≥ 2 个点</b> 即判定该航班受该段影响。可手动添加补充段。</p>
+  <div id="matchPreview"></div>
+  <div class="actions">
+    <button class="btn btn-outline" onclick="goStep(2)">◀ 上一步</button>
+    <button class="btn btn-outline btn-mini" onclick="addManualSeg()">+ 手动添加禁航段</button>
+    <button class="btn" onclick="goStep(4)">下一步：起飞时间 ▶</button>
+  </div>
+</div>
+
+<!-- Step 4: Times -->
+<div class="panel hide" id="step4">
+  <h2>④ 计划起飞时间 / 裕度</h2>
+  <p class="hint">系统已经从 NOTAM 自动读出每条 B/C 时间；这里只需要输入<b>每个航班的计划起飞时间（北京时间）</b>和裕度。</p>
+  <div class="row">
+    <label>裕度 (分)</label>
+    <input type="number" id="margin" value="15" min="0" max="60" step="1" style="width:80px;">
+    <span class="hint" style="margin:0 0 0 8px;">最晚起飞再 <b>减</b> 裕度，最早起飞再 <b>加</b> 裕度（双向保守）</span>
+  </div>
+  <div id="planTimes"></div>
+  <div class="actions">
+    <button class="btn btn-outline" onclick="goStep(3)">◀ 上一步</button>
+    <button class="btn" onclick="doCalculate()">计算禁飞窗口 ▶</button>
+  </div>
+</div>
+
+<!-- Step 5: Output -->
+<div class="panel hide" id="step5">
+  <h2>⑤ 计算结果 / 签派建议</h2>
+  <div id="resultBody"></div>
+  <div class="actions">
+    <button class="btn btn-outline" onclick="goStep(4)">◀ 修改输入</button>
+    <button class="btn btn-outline" onclick="copyReport()">复制结果摘要</button>
+    <button class="btn btn-outline" onclick="window.print()">打印</button>
+  </div>
+</div>
+
+</div>
+
+<script>
+/* ========================================================================
+   ROUTE_DB · 航路数据库（dep/arr/route 名 + 航路点序列）
+   - 自动从 ROUTE_DB 找包含 ptA / ptB 的最长航段，作为 NOTAM 的"展开点列"
+   - 同时用于猜 CFP 走哪条航路（南/北/W192 主用 等）
+   ======================================================================== */
+const ROUTE_DB = [{"dep":"ZGHA","arr":"ZWTL","route":"W192(主用)","waypoints":["OLTUS","IPMUG","BIVAV","XOPEK","DOPNI","DYG","IGPAR","ENH","ENSOX","SOSNU","P23","EMVIL","SHX","ZS","OLMEK","DOVOP","TEBIB","OVKAB","XFG","IDEBO","URBEB","P03","GUY","IDSUD","OVTIB","APESU","IDOPA","BUKPU","ANDIM","LELUX","LAXEV","P434","NOGEX","P407","OMGUP","IGDON","TODOD","P666","NIXUK","IBANO","BIKNO","AKLAS","LUPRO","UPKOT","KEXAB","PTG"]},{"dep":"ZGHA","arr":"ZWTL","route":"南线","waypoints":["OLTUS","IPMUG","BIVAV","XOPEK","DOPNI","DYG","IGPAR","ENH","ENSOX","SOSNU","P23","EMVIL","SHX","ZS","OLMEK","DOVOP","TEBIB","OVKAB","XFG","IDEBO","URBEB","P03","GUY","IDSUD","OVTIB","APESU","IDOPA","BUKPU","ANDIM","LELUX","LAXEV","P434","NOGEX","P407","OMGUP","IGDON","TODOD","P666","NIXUK","IBANO","BIKNO","AKLAS","P308","TAMOX","ESBID","IRPEP","QTV","DUBUV","KEXAB","PTG"]},{"dep":"ZGHA","arr":"ZWTL","route":"北线","waypoints":["OLTUS","IPMUG","BIVAV","XOPEK","DOPNI","DYG","IGPAR","ENH","ENSOX","SOSNU","P23","EMVIL","SHX","ZS","OLMEK","DOVOP","TEBIB","OVKAB","XFG","IDEBO","URBEB","P03","GUY","IDSUD","OVTIB","APESU","IDOPA","ATERO","VENIV","IGENA","OLSUG","P418","ALGOT","P587","ESPED","IDSIP","GOVSA","NUKTI","HAM","IDLAL","P674","ODURI","IDOPU","DUDUR","QTV","DUBUV","KEXAB","PTG"]},{"dep":"ZWTL","arr":"ZGHA","route":"W192(主用)","waypoints":["PTG","KEXAB","UPKOT","LUPRO","AKLAS","AVLIM","ESDEX","MOVBI","KARVI","TOSAP","P667","VIKUP","ATNOK","MULRU","P408","RUSAT","NODID","ESMEX","AVBUD","PANRA","DNC","UPKOD","BIGUX","UKBIN","JIG","XOGAB","SADBU","HO","P396","EPDOR","ATGEN","SUDGO","P234","P361","P23","SNF","P698","P487","P497","OLPOV","YIH","KAKSU","KALMU","CD","AVKOK","LLC","RUKLI"]},{"dep":"ZWTL","arr":"ZGHA","route":"南线","waypoints":["PTG","KEXAB","DUBUV","QTV","ADPET","ESGIV","DAKPA","IDOPU","P126","IPMUN","AKLAS","AVLIM","ESDEX","MOVBI","KARVI","TOSAP","P667","VIKUP","ATNOK","MULRU","P408","RUSAT","NODID","ESMEX","AVBUD","PANRA","DNC","UPKOD","BIGUX","UKBIN","JIG","XOGAB","SADBU","HO","P396","EPDOR","ATGEN","SUDGO","P234","P361","P23","SNF","P698","P487","P497","OLPOV","YIH","KAKSU","KALMU","CD","AVKOK","LLC","RUKLI"]},{"dep":"ZWTL","arr":"ZGHA","route":"北线","waypoints":["PTG","KEXAB","DUBUV","QTV","ADPET","ESGIV","DAKPA","P675","RIMDU","BATUS","LIKMI","BOTKI","POPIB","BUVEM","NOLOM","IPDAT","P538","DAMRO","ELRUB","P401","JELAN","IDUGI","AGITU","APESU","BIGUX","UKBIN","JIG","XOGAB","SADBU","HO","P396","EPDOR","ATGEN","SUDGO","P234","P361","P23","SNF","P698","P487","P497","OLPOV","YIH","KAKSU","KALMU","CD","AVKOK","LLC","RUKLI"]},{"dep":"ZLYA","arr":"ZWSC","route":"W187线(主用)","waypoints":["NNW","MIGIR","ATERI","YLX","LUVES","MIMOK","YHD","NIRUV","BELIP","OROXU","IDUGI","JTA","VENIV","ANDIM","LELUX","LAXEV","P434","NOGEX","P407","OMGUP","IGDON","TODOD","P666","NIXUK","DNH","KARVI","TUSLI","OBDEG","SAKLU","SADAN","PEBGO","KANPI","MAGIV","DSC"]},{"dep":"ZLYA","arr":"ZWSC","route":"南线","waypoints":["NNW","MIGIR","ATERI","YLX","LUVES","MIMOK","YHD","NIRUV","BELIP","OROXU","IDUGI","JTA","VENIV","ANDIM","LELUX","LAXEV","P434","NOGEX","P407","OMGUP","IGDON","TODOD","P666","NIXUK","IBANO","BIKNO","AKLAS","LUPRO","UPKOT","KEXAB","FKG","WUR","IGBIS","KABDO","BIVEX","NIXER","MENOD","OGEDI","GOBOK","P267","EXURU","LIMDO","KQS","LESVI","P191","LEDEM","MAGIV","DSC"]},{"dep":"ZLYA","arr":"ZWSC","route":"北线","waypoints":["NNW","MIGIR","ATERI","YLX","LUVES","MIMOK","YHD","NIRUV","P137","OPULI","TUNVA","ELRUB","YBL","ALGOT","P587","ESPED","IDSIP","GOVSA","NUKTI","HAM","POVEK","IRPEP","DUBUV","DUMAM","FKG","WUR","IGBIS","KABDO","BIVEX","NIXER","MENOD","OGEDI","GOBOK","P267","EXURU","LIMDO","KQS","LESVI","P191","LEDEM","MAGIV","DSC"]},{"dep":"ZWSC","arr":"ZLYA","route":"W187线(主用)","waypoints":["MAGIV","KANPI","PEBGO","SADAN","SAKLU","OBDEG","TUSLI","KARVI","TOSAP","P667","VIKUP","ATNOK","MULRU","P408","RUSAT","NODID","ESMEX","AVBUD","PANRA","DNC","ATERO","MUDAP","AGITU","LEVGI","ADPUX","ZWX","LUVKO","YHD","MIMOK","LUVES","OKISO","P531"]},{"dep":"ZWSC","arr":"ZLYA","route":"W112线","waypoints":["MAGIV","KANPI","PEBGO","SADAN","SAKLU","OBDEG","TUSLI","VIKUP","ATNOK","MULRU","P408","RUSAT","NODID","ESMEX","AVBUD","PANRA","DNC","ATERO","MUDAP","AGITU","LEVGI","ADPUX","ZWX","LUVKO","YHD","MIMOK","LUVES","OKISO","P531"]},{"dep":"ZWSC","arr":"ZLYA","route":"南线","waypoints":["MAGIV","LEDEM","P191","LESVI","PAMLI","P185","XKC","BEBEP","POSOT","EPDAG","AKVOV","KABDO","IGBIS","WUR","FKG","KEXAB","UPKOT","LUPRO","AKLAS","AVLIM","ESDEX","MOVBI","KARVI","TOSAP","P667","VIKUP","ATNOK","MULRU","P408","RUSAT","NODID","ESMEX","AVBUD","PANRA","DNC","ATERO","MUDAP","AGITU","LEVGI","ADPUX","ZWX","LUVKO","YHD","MIMOK","LUVES","OKISO","P531"]},{"dep":"ZWSC","arr":"ZLYA","route":"北线","waypoints":["MAGIV","LEDEM","P191","LESVI","PAMLI","P185","XKC","BEBEP","POSOT","EPDAG","AKVOV","KABDO","IGBIS","WUR","FKG","ADPET","ESGIV","DAKPA","P675","RIMDU","BATUS","LIKMI","BOTKI","POPIB","BUVEM","NOLOM","IPDAT","P538","DAMRO","ELRUB","TUNVA","OPULI","P137","NIRUV","YHD","MIMOK","LUVES","OKISO","P531"]},{"dep":"ZSWX","arr":"ZWHZ","route":"南线(主用)","waypoints":["SASAN","VMB","PIMUS","DOGVI","MLJ","VEMEX","SUNBO","AGASK","HFE","MAGLI","P734","GUXUV","P343","BIPIM","FYG","GUTVO","ZHO","P129","P295","P256","LRU","P320","P338","P541","P357","P63","SHX","ZS","OLMEK","DOVOP","TEBIB","OVKAB","XFG","IDEBO","URBEB","P03","GUY","IDSUD","OVTIB","APESU","IDOPA","BUKPU","ANDIM","LELUX","LAXEV","P434","NOGEX","P407","OMGUP","IGDON","TODOD","P666","NIXUK","IBANO","BIKNO","AKLAS","LUPRO","UPKOT","KEXAB","FKG","VARMI","UGPEL","IKARA","OMKEN","P221","P460","DJS"]},{"dep":"ZSWX","arr":"ZWHZ","route":"北线","waypoints":["SASAN","VMB","PIMUS","DOGVI","MLJ","VEMEX","SUNBO","AGASK","HFE","MAGLI","P734","GUXUV","P343","BIPIM","FYG","GUTVO","ZHO","P129","P295","P256","LRU","P320","P338","P541","P357","P63","SHX","ZS","OLMEK","DOVOP","TEBIB","OVKAB","XFG","IDEBO","URBEB","P03","GUY","IDSUD","OVTIB","APESU","IDOPA","ATERO","VENIV","IGENA","OLSUG","P418","ALGOT","P587","ESPED","IDSIP","GOVSA","NUKTI","HAM","POVEK","IRPEP","DUBUV","DUMAM","FKG","VARMI","UGPEL","IKARA","OMKEN","P221","P460","DJS"]},{"dep":"ZWHZ","arr":"ZSWX","route":"南线(主用)","waypoints":["DJS","P460","P221","OMKEN","IKARA","UGPEL","VARMI","FKG","KEXAB","UPKOT","LUPRO","AKLAS","AVLIM","ESDEX","MOVBI","KARVI","TOSAP","P667","VIKUP","ATNOK","MULRU","P408","RUSAT","NODID","ESMEX","AVBUD","PANRA","DNC","UPKOD","BIGUX","UKBIN","JIG","XOGAB","SADBU","HO","P396","EPDOR","ATGEN","SUDGO","UPSIK","NUGSA","KIKIV","P542","ML","P403","REVKU","P242","P450","P123","FYG","BIPIM","P343","GUXUV","P734","MAGLI","HFE","MADUK","UPLEL","OLRIS","LUPVI","P282","ATLIX","ESBAG","SASAN"]},{"dep":"ZWHZ","arr":"ZSWX","route":"北线","waypoints":["DJS","P460","P221","OMKEN","IKARA","UGPEL","VARMI","FKG","ADPET","ESGIV","DAKPA","P675","RIMDU","BATUS","LIKMI","BOTKI","POPIB","BUVEM","NOLOM","IPDAT","P538","DAMRO","ELRUB","P401","JELAN","IDUGI","AGITU","APESU","BIGUX","UKBIN","JIG","XOGAB","SADBU","HO","P396","EPDOR","ATGEN","SUDGO","UPSIK","NUGSA","KIKIV","P542","ML","P403","REVKU","P242","P450","P123","FYG","BIPIM","P343","GUXUV","P734","MAGLI","HFE","MADUK","UPLEL","OLRIS","LUPVI","P282","ATLIX","ESBAG","SASAN"]},{"dep":"ZPPP","arr":"ZSJG","route":"主用","waypoints":["DADOL","P334","ZAT","OTBIM","ATPAV","VEDPO","KAKMI","IGNAK","IPLOL","WFX","SAGPI","TOREG","ATNIK","LOSTA","MAKVI","AGULU","APIMI","NSH","SUDGO","UPSIK","NUGSA","KIKIV","P542","ML","P403","REVKU","P242","P536","TULRA","IGMIG","VINIG","P129","OBMEP","OKTOX","P171","P172","P146","P173","HZG","P637","KDB"]}];
+
+
+/* ========================================================================
+   STATE
+   ======================================================================== */
+let parsedNotamBlocks = [];   // [{id, series, isUTC, bMin, eMin, segs:[{idx,airway,ptA,ptB,allWaypoints}]}]
+let parsedPlans = [];         // [{name, dep, arr, totalMin, waypoints:[{name,etrMin}], route, hits:[]}]
+let manualSegs = [];          // 用户手填段：[{notamId,bMin,eMin,airway,ptA,ptB,allWaypoints}]
+let calcResults = [];         // 每个航班的计算结果
+let currentStep = 1;
+
+/* ========================================================================
+   工具函数
+   ======================================================================== */
+const pad2 = n => String(Math.floor(n)).padStart(2,'0');
+const fmtMin = (mins, withDay) => {
+  if (mins == null || isNaN(mins)) return '--:--';
+  let m = Math.round(mins);
+  let day = 0;
+  while (m < 0) { m += 1440; day -= 1; }
+  while (m >= 1440) { m -= 1440; day += 1; }
+  const h = Math.floor(m/60), mi = m%60;
+  let s = `${pad2(h)}:${pad2(mi)}`;
+  if (withDay && day !== 0) s = (day>0?'次日 ':'前日 ')+s;
+  return s;
+};
+const fmtDur = mins => {
+  if (mins == null || isNaN(mins)) return '--';
+  const sign = mins < 0 ? '-' : '';
+  const a = Math.abs(Math.round(mins));
+  const h = Math.floor(a/60), m = a%60;
+  if (h === 0) return `${sign}${m}分`;
+  return `${sign}${h}小时${m?m+'分':''}`;
+};
+const parseHHMM = s => {
+  if (!s) return null;
+  s = String(s).trim();
+  const m = s.match(/^(\d{1,2})[:：]?(\d{2})$/);
+  if (!m) return null;
+  const h = parseInt(m[1]), mi = parseInt(m[2]);
+  if (h>23 || mi>59) return null;
+  return h*60 + mi;
+};
+const parseHHMM4 = s => {
+  // "1410" -> 14*60+10
+  if (!s) return null;
+  const t = String(s).padStart(4,'0');
+  const h = parseInt(t.substring(0,2)), mi = parseInt(t.substring(2,4));
+  if (h>23 || mi>59) return null;
+  return h*60 + mi;
+};
+const showToast = (msg, kind='ok') => {
+  const t = document.createElement('div');
+  t.className = `toast ${kind}`;
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(()=>t.remove(), 2400);
+};
+
+/* ========================================================================
+   航路点名清洗（兼容 VOR''XXX''、中文+英文、各种引号）
+   ======================================================================== */
+function cleanWaypointName(raw) {
+  if (!raw) return '';
+  raw = String(raw).trim();
+  const Q = `['"\`\u2018\u2019\u201C\u201D\u2032\u2033\u00B4]`;
+  // 引号包围
+  let m = raw.match(new RegExp(`${Q}+\\s*([A-Z][A-Z0-9]{1,4})\\s*${Q}+`));
+  if (m) return m[1].toUpperCase();
+  // 导航台前缀 + 代码：VOR BHT / NDB:DKO
+  m = raw.match(/(?:VOR|NDB|DME|TAC|VORTAC|ILS|LOC)\s*[:：\-]?\s*([A-Z][A-Z0-9]{1,4})/i);
+  if (m) return m[1].toUpperCase();
+  // 纯标准代码
+  m = raw.match(/^([A-Z][A-Z0-9]{1,4})$/i);
+  if (m) return m[1].toUpperCase();
+  // 中文+英文 → 取最后一段（排除导航台缩写）
+  const all = raw.match(/[A-Z][A-Z0-9]{1,4}/gi);
+  if (all && all.length) {
+    const NAV = new Set(['VOR','NDB','DME','TAC','VORTAC','ILS','LOC','GPS','RNP','GND','UNL']);
+    for (let i=all.length-1;i>=0;i--) if (!NAV.has(all[i].toUpperCase())) return all[i].toUpperCase();
+    return all[all.length-1].toUpperCase();
+  }
+  return raw.toUpperCase();
+}
+
+/* ========================================================================
+   航路库查找：找包含 A 和 B 的最长子段
+   ======================================================================== */
+function findWaypointsBetween(ptA, ptB) {
+  let best = [];
+  for (const r of ROUTE_DB) {
+    const wps = r.waypoints;
+    const ia = wps.indexOf(ptA), ib = wps.indexOf(ptB);
+    if (ia >= 0 && ib >= 0) {
+      const s = Math.min(ia,ib), e = Math.max(ia,ib);
+      const seg = wps.slice(s, e+1);
+      if (seg.length > best.length) best = seg;
+    }
+  }
+  return best.length ? best : [ptA, ptB];
+}
+
+/* ========================================================================
+   NOTAM 解析（支持多个 NOTAM 块）
+   每块返回 {id, series, isUTC, bMin, eMin, segs:[]}
+   ======================================================================== */
+function splitNotamBlocks(text) {
+  // 用 NOTAM 编号开头切：C1149/26 / A0123/26 / D044/25
+  const headRe = /(^|\n)\s*([A-Z]\d{3,4}\s*\/\s*\d{2})\s+([A-Z]{4})/g;
+  const heads = [];
+  let m;
+  while ((m = headRe.exec(text)) !== null) {
+    heads.push({pos: m.index + m[1].length, id: m[2].replace(/\s+/g,''), fir: m[3]});
+  }
+  if (!heads.length) return [{pos:0, id:'未知NOTAM', fir:'', body:text}];
+  const blocks = [];
+  for (let i=0;i<heads.length;i++) {
+    const start = heads[i].pos;
+    const end = i+1<heads.length ? heads[i+1].pos : text.length;
+    blocks.push({id:heads[i].id, fir:heads[i].fir, body:text.substring(start,end)});
+  }
+  return blocks;
+}
+
+function parseOneNotam(block, tzMode) {
+  const id = block.id;
+  const series = id.charAt(0);
+  // 时区：自动模式下 A 系列 = 国际 = UTC，需 +8；C/D 系列 = 国内 = 北京时间
+  let isUTC;
+  if (tzMode === 'utc') isUTC = true;
+  else if (tzMode === 'bj') isUTC = false;
+  else isUTC = (series === 'A');
+
+  const toBJ = raw => {
+    let m = parseHHMM4(raw);
+    if (m == null) return null;
+    if (isUTC) m = (m + 480) % 1440;
+    return m;
+  };
+
+  const bM = block.body.match(/B\)\s*(?:\d{4}[\/\-.]\d{2}[\/\-.]\d{2}\s+)?(\d{2,4})/);
+  const cM = block.body.match(/C\)\s*(?:\d{4}[\/\-.]\d{2}[\/\-.]\d{2}\s+)?(\d{2,4})/);
+  const bMin = bM ? toBJ(bM[1]) : null;
+  const eMin = cM ? toBJ(cM[1]) : null;
+
+  // E) 段正文
+  let body = block.body;
+  const eIdx = body.search(/\bE\)/);
+  if (eIdx >= 0) {
+    const rest = body.substring(eIdx);
+    const fIdx = rest.search(/\n\s*[FG]\)/);
+    body = fIdx > 0 ? rest.substring(0, fIdx) : rest;
+  }
+  // 切条目：1. 1、 1) ① 等
+  const itemRe = /(?:^|[\n;；])\s*(?:(\d+)|([\u2460-\u2473]))\s*[\.\．、,，）)]\s*([^\n;；]+)/g;
+  const items = [];
+  let im;
+  while ((im = itemRe.exec(body)) !== null) {
+    const n = im[1] ? parseInt(im[1]) : (im[2] ? im[2].charCodeAt(0) - 0x245F : items.length+1);
+    items.push({n, content: im[3].trim()});
+  }
+  // 解析每条
+  const segs = [];
+  items.forEach(it => {
+    // 跳过情报录入说明、F)/G) 后内容、明显非禁航段（半径范围）
+    if (/情报录入|主降航线|备降/.test(it.content) && !/航[线路]/.test(it.content)) return;
+    if (/为中心.*半径|以.+VOR.*半径/.test(it.content)) {
+      // 圆形禁航不参与航段计算，记录但不处理
+      return;
+    }
+    // 抓航路代码
+    const aw = it.content.match(/\b([A-Z]{1,2}\d{1,4}[A-Z]?|J\d{1,3}|Y\d{1,3}|H\d{1,3}|L\d{1,3}|V\d{1,3}|W\d{1,3}|B\d{1,3}|G\d{1,3}|A\d{1,3}|R\d{1,3})\b/);
+    if (!aw) return;
+    const airway = aw[1];
+    // 抓括号内端点：( A - B ) 或 （A至B）等
+    let ptA = null, ptB = null;
+    const br = it.content.match(/[（(【〔\[]\s*([^）)】〕\]]+?)\s*[)）】〕\]]/);
+    if (br) {
+      const inner = br[1];
+      // 关键词排除：含"以西/以北/为中心"等模糊范围 → 也尝试解，但标记
+      const parts = inner.split(/\s*(?:-+|—+|–|~|～|至|到|→|->)\s*/);
+      if (parts.length >= 2) {
+        ptA = cleanWaypointName(parts[0]);
+        ptB = cleanWaypointName(parts[parts.length-1]);
+      }
+    }
+    if (!ptA || !ptB) return;
+    const allWaypoints = findWaypointsBetween(ptA, ptB);
+    segs.push({idx: it.n, airway, ptA, ptB, allWaypoints, raw: it.content});
+  });
+  return {id, fir:block.fir, series, isUTC, bMin, eMin, segs};
+}
+
+function doParseNotam() {
+  const text = document.getElementById('notamInput').value;
+  if (!text.trim()) return showToast('请粘贴 NOTAM 内容', 'error');
+  const tzMode = document.getElementById('tzMode').value;
+  const blocks = splitNotamBlocks(text);
+  parsedNotamBlocks = blocks.map(b => parseOneNotam(b, tzMode));
+  if (!parsedNotamBlocks.some(b => b.segs.length)) {
+    return showToast('未识别到任何禁航段，请检查格式', 'error');
+  }
+  renderNotamPreview();
+  markStepDone(1);
+  showToast(`已解析 ${parsedNotamBlocks.length} 条 NOTAM、${parsedNotamBlocks.reduce((s,b)=>s+b.segs.length,0)} 个航段`);
+  goStep(2);
+}
+
+function renderNotamPreview() {
+  const el = document.getElementById('notamPreview');
+  let html = '';
+  parsedNotamBlocks.forEach(b => {
+    html += `<div class="notam-block">
+      <div class="nb-head">
+        <div class="nb-id">${b.id} · ${b.fir||''} <span style="color:var(--mu);font-size:11px;font-weight:normal;">[${b.series}系列 / ${b.isUTC?'UTC→BJ':'北京时间'}]</span></div>
+        <div class="nb-time">B) ${fmtMin(b.bMin)} ~ C) ${fmtMin(b.eMin)} (BJ)</div>
+      </div>`;
+    if (!b.segs.length) html += `<div class="hint" style="color:var(--warn)">⚠ 此条未识别出航段（可能是圆形禁航/全高度禁航说明，本工具无法用于点-点计算）</div>`;
+    b.segs.forEach(s => {
+      html += `<div class="seg">
+        <div class="seg-head"><div><span class="seg-airway">第${s.idx}条 · ${s.airway}</span> <span style="color:var(--mu);font-size:11px;">(${s.ptA} - ${s.ptB})</span></div></div>
+        <div class="chips">${s.allWaypoints.map(w=>`<span class="chip">${w}</span>`).join('')}</div>
+      </div>`;
+    });
+    html += `</div>`;
+  });
+  el.innerHTML = html;
+}
+
+/* ========================================================================
+   CFP 解析（多航班）
+   ======================================================================== */
+function splitCfpBlocks(text) {
+  // 以 PLAN 开头切
+  const blocks = [];
+  const re = /(^|\n)\s*PLAN\s+/g;
+  let m, last = -1;
+  const positions = [];
+  while ((m = re.exec(text)) !== null) {
+    positions.push(m.index + m[1].length);
+  }
+  if (!positions.length) return [text];
+  for (let i=0;i<positions.length;i++) {
+    const s = positions[i], e = i+1<positions.length ? positions[i+1] : text.length;
+    blocks.push(text.substring(s,e));
+  }
+  return blocks;
+}
+
+function parseOneCfp(text) {
+  const plan = {dep:null, arr:null, totalMin:null, waypoints:[], callsign:'', planNo:'', acReg:'', etdZ:null, raw:text};
+  // 头部：PLAN 5074   ZGHA TO ZWTL
+  const h = text.match(/PLAN\s+(\d+)\s+([A-Z]{4})\s+TO\s+([A-Z]{4})/);
+  if (h) { plan.planNo=h[1]; plan.dep=h[2]; plan.arr=h[3]; }
+  // 总飞行时间： DEST ZWTL 009541 04/15 1707
+  const t = text.match(/DEST\s+[A-Z]{4}\s+\d+\s+(\d{2})\/(\d{2})/);
+  if (t) plan.totalMin = parseInt(t[1])*60 + parseInt(t[2]);
+  // 呼号
+  const c = text.match(/CALLSIGN[:：]\s*(\w+)/);
+  if (c) plan.callsign = c[1];
+  // ETD
+  const etd = text.match(/FOR\s+ETD\s+(\d{4})Z/);
+  if (etd) plan.etdZ = parseHHMM4(etd[1]);
+  // 机型/注册号 PROGS  0906NWS  B30A2
+  const ac = text.match(/PROGS\s+\S+\s+(B[\dA-Z]{2,4})/);
+  if (ac) plan.acReg = 'B-'+ac[1].substring(1);
+  // 航路点逐行：行首空白 + 名字（≤5 字符大小写数字）+ 多列数字，第 11 列(0-based 10)是 ETR
+  // 列：CPT FLT T WIND S TAS MCS AWY DST DSTR ETE ETR FU FR FF/E
+  // 例：OLTUS  236 M21 25051 03 402 273 ..    022 1628 0004 0400 0139 11898 1144
+  // 跳过 TOC/TOD/ELEV/CPT 行
+  const lines = text.split(/\n/);
+  for (const ln of lines) {
+    // 列：CPT FLT T WIND S TAS MCS AWY DST DSTR ETE ETR FU FR FF/E
+    // 取 ETR (从 AWY 起的第 4 个数值字段)
+    const m2 = ln.match(/^([A-Z][A-Z0-9]{1,4})\s+(\d{3})\s+[MP](?:\d{2}|\.\.)\s+\S+\s+\S+\s+\d{3}\s+\d{3}\s+(\S+)\s+(\d{3})\s+(\d{4})\s+(\d{4})\s+(\d{4})/);
+    if (m2) {
+      const name = m2[1];
+      if (name === 'TOC' || name === 'TOD') continue;
+      const etr = parseHHMM4(m2[7]);  // ETR 列
+      if (etr != null) plan.waypoints.push({name, etrMin: etr});
+    }
+  }
+  return plan;
+}
+
+function pickRoute(plan) {
+  // 在 ROUTE_DB 找 dep/arr 匹配的所有变体，按命中航路点数排序取最高
+  const cands = ROUTE_DB.filter(r => r.dep === plan.dep && r.arr === plan.arr);
+  if (!cands.length) return null;
+  const wpset = new Set(plan.waypoints.map(w => w.name));
+  let best = cands[0], bestScore = -1;
+  for (const c of cands) {
+    const score = c.waypoints.filter(w => wpset.has(w)).length;
+    if (score > bestScore) { best = c; bestScore = score; }
+  }
+  return {route: best, score: bestScore};
+}
+
+function doParseCfp() {
+  const text = document.getElementById('cfpInput').value;
+  if (!text.trim()) return showToast('请粘贴飞行计划', 'error');
+  const blocks = splitCfpBlocks(text);
+  parsedPlans = blocks.map(parseOneCfp).filter(p => p.dep && p.arr && p.totalMin && p.waypoints.length);
+  if (!parsedPlans.length) return showToast('未识别到有效飞行计划', 'error');
+  parsedPlans.forEach(p => {
+    const pick = pickRoute(p);
+    p.route = pick ? `${pick.route.route} (匹配${pick.score}点)` : '航路库未覆盖';
+  });
+  renderCfpPreview();
+  markStepDone(2);
+  showToast(`已解析 ${parsedPlans.length} 个航班`);
+  doMatch();
+  goStep(3);
+}
+
+function renderCfpPreview() {
+  const el = document.getElementById('cfpPreview');
+  let h = '';
+  parsedPlans.forEach((p, i) => {
+    h += `<div class="plan-card">
+      <div class="plan-head">
+        <span class="pname">#${i+1} · ${p.callsign||p.planNo} · ${p.dep} → ${p.arr}</span>
+        <span class="plan-stat">${p.acReg||''} · 总飞行 ${fmtDur(p.totalMin)} · ${p.waypoints.length} 个航路点 · 走 ${p.route}</span>
+      </div>
+      <div class="chips" style="max-height:60px;overflow:auto">${p.waypoints.map(w=>`<span class="chip">${w.name} <span style="color:var(--mu);font-size:10px;">${fmtMin(p.totalMin-w.etrMin)}过</span></span>`).join('')}</div>
+    </div>`;
+  });
+  el.innerHTML = h;
+}
+
+/* ========================================================================
+   匹配：每个 plan × 每个 NOTAM 块的每个段
+   ======================================================================== */
+function doMatch() {
+  parsedPlans.forEach(plan => {
+    plan.hits = [];
+    const wpset = new Set(plan.waypoints.map(w => w.name));
+    parsedNotamBlocks.forEach(block => {
+      block.segs.forEach(seg => {
+        const matched = seg.allWaypoints.filter(w => wpset.has(w));
+        if (matched.length >= 2) {
+          // entry = 第一个出现在 CFP 中的命中点（按 CFP 顺序）
+          const orderedHits = plan.waypoints.filter(w => matched.includes(w.name));
+          const entry = orderedHits[0];
+          const exit = orderedHits[orderedHits.length-1];
+          plan.hits.push({
+            notamId: block.id,
+            bMin: block.bMin, eMin: block.eMin,
+            airway: seg.airway, idx: seg.idx,
+            ptA: seg.ptA, ptB: seg.ptB,
+            entry: entry.name, exit: exit.name,
+            entryEtr: entry.etrMin, exitEtr: exit.etrMin,
+            matchedPts: matched,
+            allWp: seg.allWaypoints,
+          });
+        }
+      });
+    });
+  });
+  renderMatch();
+}
+
+function renderMatch() {
+  const el = document.getElementById('matchPreview');
+  let h = '';
+  parsedPlans.forEach((p, i) => {
+    h += `<div class="plan-card">
+      <div class="plan-head">
+        <span class="pname">#${i+1} · ${p.callsign||p.planNo} · ${p.dep} → ${p.arr}</span>
+        <span class="plan-stat">受影响 ${p.hits.length} 段</span>
+      </div>`;
+    if (!p.hits.length) {
+      h += `<div class="hint" style="color:var(--ok)">✓ 当前 NOTAM 集合中没有航段命中本航班 ≥ 2 个航路点。</div>`;
+    } else {
+      p.hits.forEach((hit, j) => {
+        const wpHtml = hit.allWp.map(w => {
+          let cls = 'chip';
+          if (w === hit.entry) cls += ' entry';
+          else if (w === hit.exit) cls += ' exit';
+          else if (hit.matchedPts.includes(w)) cls += ' hit';
+          return `<span class="${cls}">${w}</span>`;
+        }).join('');
+        h += `<div class="seg affected">
+          <div class="seg-head">
+            <div><span class="seg-airway">${hit.notamId} 第${hit.idx}条 · ${hit.airway}</span>
+              <span style="color:var(--mu);font-size:11px;">禁航 ${fmtMin(hit.bMin)} ~ ${fmtMin(hit.eMin)}</span></div>
+            <span class="seg-tag bad">受影响</span>
+          </div>
+          <div style="font-size:11px;color:var(--mu);margin:2px 0;">进入 <b style="color:var(--ok)">${hit.entry}</b> ETR ${fmtMin(hit.entryEtr)} · 离开 <b style="color:#a78bfa">${hit.exit}</b> ETR ${fmtMin(hit.exitEtr)}</div>
+          <div class="chips">${wpHtml}</div>
+        </div>`;
+      });
+    }
+    h += `</div>`;
+  });
+  el.innerHTML = h;
+  renderPlanTimes();
+}
+
+function renderPlanTimes() {
+  // step4 inputs
+  const el = document.getElementById('planTimes');
+  let h = '';
+  parsedPlans.forEach((p, i) => {
+    h += `<div class="plan-card">
+      <div class="plan-head">
+        <span class="pname">#${i+1} · ${p.callsign||p.planNo} · ${p.dep} → ${p.arr}</span>
+        <span class="plan-stat">受影响 ${p.hits.length} 段</span>
+      </div>
+      <div class="row">
+        <label>计划起飞 (BJ)</label>
+        <input type="text" id="dep_${i}" placeholder="08:55" value="${p._depStr||''}">
+        <label style="min-width:60px">备注</label>
+        <input type="text" id="note_${i}" style="width:240px" placeholder="可选" value="${p._note||''}">
+      </div>
+    </div>`;
+  });
+  el.innerHTML = h;
+}
+
+/* ========================================================================
+   核心计算（按 Excel 原型口径，每段独立、按各自 NOTAM B/C 时间）
+   ======================================================================== */
+function calcOneHit(hit, plan, marginMin) {
+  // timeToEntry / timeToExit (起飞→到达进入/离开点 的耗时)
+  const timeToEntry = plan.totalMin - hit.entryEtr;
+  const timeToExit = plan.totalMin - hit.exitEtr;
+  const transit = timeToExit - timeToEntry;
+  // 最晚起飞：让航班在禁航开始前离开 → 起飞 + timeToExit ≤ bMin → 起飞 ≤ bMin - timeToExit
+  let pStart = hit.bMin, pEnd = hit.eMin;
+  // 跨零点：如果 pEnd < pStart，认为禁航跨日，pEnd += 1440
+  if (pEnd < pStart) pEnd += 1440;
+  const latestNo = pStart - timeToExit;
+  const latestWith = latestNo - marginMin;
+  const earliestNo = pEnd - timeToEntry;
+  const earliestWith = earliestNo + marginMin;
+  return {
+    ...hit,
+    timeToEntry, timeToExit, transit,
+    latestNo, latestWith, earliestNo, earliestWith,
+    window: [latestWith, earliestWith],
+  };
+}
+
+function mergeWindows(wins) {
+  // wins: [[a,b], ...]，已是分钟数；可能跨零点（end > 1440 OK）
+  if (!wins.length) return [];
+  const sorted = wins.map(w => [...w]).sort((a,b) => a[0]-b[0]);
+  const out = [sorted[0]];
+  for (let i=1;i<sorted.length;i++) {
+    const last = out[out.length-1];
+    if (sorted[i][0] <= last[1]) { last[1] = Math.max(last[1], sorted[i][1]); }
+    else out.push(sorted[i]);
+  }
+  return out;
+}
+
+function doCalculate() {
+  const margin = parseInt(document.getElementById('margin').value)||0;
+  // 收集起飞时间
+  for (let i=0;i<parsedPlans.length;i++) {
+    const ds = document.getElementById(`dep_${i}`).value.trim();
+    parsedPlans[i]._depStr = ds;
+    parsedPlans[i]._depMin = parseHHMM(ds);
+    parsedPlans[i]._note = document.getElementById(`note_${i}`).value.trim();
+  }
+  if (parsedPlans.some(p => p._depMin == null)) {
+    return showToast('请填写每个航班的计划起飞时间（HH:MM）', 'error');
+  }
+  calcResults = parsedPlans.map(plan => {
+    const hits = plan.hits.map(h => calcOneHit(h, plan, margin));
+    const merged = mergeWindows(hits.map(h => h.window));
+    // 判定计划起飞时间是否落在窗口内
+    const dep = plan._depMin;
+    const inWin = merged.some(([a,b]) => {
+      // 处理跨日：把 dep 也加 1440 试试
+      if (dep >= a && dep <= b) return true;
+      if (dep+1440 >= a && dep+1440 <= b) return true;
+      return false;
+    });
+    // 推荐：如果在窗口内，给出"X 之前 或 Y 之后"
+    let advice = '';
+    if (inWin) {
+      const win = merged.find(([a,b]) => (dep>=a&&dep<=b)||(dep+1440>=a&&dep+1440<=b));
+      advice = `需在 ${fmtMin(win[0])} 之前 或 ${fmtMin(win[1], true)} 之后起飞`;
+    } else if (merged.length) {
+      advice = `计划起飞 ${fmtMin(dep)} 不在禁飞窗口内，可正常放行`;
+    } else {
+      advice = '本航班无禁飞窗口，正常放行';
+    }
+    return {plan, hits, merged, dep, inWin, advice, margin};
+  });
+  renderResult();
+  markStepDone(4);
+  goStep(5);
+}
+
+/* ========================================================================
+   结果渲染：总览 + 详细表 + 甘特图 + 文字报告
+   ======================================================================== */
+function renderResult() {
+  const el = document.getElementById('resultBody');
+  let h = '';
+  // 总览：按航班分块
+  calcResults.forEach((r, i) => {
+    const cls = r.inWin ? 'bad' : (r.merged.length ? 'warn' : 'ok');
+    h += `<div class="plan-card" style="border-color:${r.inWin?'var(--err)':r.merged.length?'var(--warn)':'var(--ok)'}">
+      <div class="plan-head">
+        <span class="pname">#${i+1} · ${r.plan.callsign||r.plan.planNo} · ${r.plan.acReg||''} · ${r.plan.dep} → ${r.plan.arr}</span>
+        <span class="plan-stat">总飞行 ${fmtDur(r.plan.totalMin)} · 计划起飞 ${fmtMin(r.dep)} · 裕度 ${r.margin}分</span>
+      </div>
+      <div class="summary-grid">
+        <div class="sum-card"><div class="lab">受影响段数</div><div class="val">${r.hits.length}</div></div>
+        <div class="sum-card ${cls}"><div class="lab">起飞判定</div><div class="val">${r.inWin?'⚠ 在窗口内':r.merged.length?'✓ 不在窗口':'✓ 无影响'}</div></div>
+        <div class="sum-card"><div class="lab">合并后禁飞窗口</div><div class="val" style="font-size:14px;">${r.merged.length?r.merged.map(w=>`${fmtMin(w[0])}~${fmtMin(w[1],true)}`).join(' / '):'无'}</div></div>
+        <div class="sum-card ${cls}"><div class="lab">签派建议</div><div class="val" style="font-size:13px;">${r.advice}</div></div>
+      </div>`;
+    if (r.hits.length) {
+      h += `<table>
+        <tr><th>NOTAM</th><th>条</th><th>航路</th><th>进入点</th><th>ETR→</th><th>离开点</th><th>ETR→</th><th>穿越</th><th>禁航</th><th>含裕度最晚</th><th>含裕度最早</th><th>该段窗口</th></tr>`;
+      r.hits.forEach(hh => {
+        h += `<tr class="bad">
+          <td>${hh.notamId}</td><td>第${hh.idx}</td><td>${hh.airway}</td>
+          <td>${hh.entry}</td><td>${fmtMin(hh.entryEtr)}</td>
+          <td>${hh.exit}</td><td>${fmtMin(hh.exitEtr)}</td>
+          <td>${fmtDur(hh.transit)}</td>
+          <td>${fmtMin(hh.bMin)}~${fmtMin(hh.eMin,true)}</td>
+          <td>${fmtMin(hh.latestWith,true)}</td>
+          <td>${fmtMin(hh.earliestWith,true)}</td>
+          <td><span class="win-pill">${fmtMin(hh.window[0],true)}~${fmtMin(hh.window[1],true)}</span></td>
+        </tr>`;
+      });
+      h += `</table>`;
+      // 甘特图
+      h += renderGantt(r);
+    }
+    h += `</div>`;
+  });
+  // 总报告
+  h += `<div class="panel" style="margin-top:14px;">
+    <h2>📋 签派结论文本（可直接复制粘贴）</h2>
+    <div class="report" id="reportText">${buildReport()}</div>
+  </div>`;
+  el.innerHTML = h;
+}
+
+function renderGantt(r) {
+  // 时间范围：取最早/最晚 -30/+30
+  const allT = [];
+  r.hits.forEach(hh => {
+    allT.push(hh.bMin, hh.eMin > hh.bMin ? hh.eMin : hh.eMin+1440);
+    allT.push(hh.window[0], hh.window[1]);
+  });
+  allT.push(r.dep);
+  let t0 = Math.min(...allT) - 30, t1 = Math.max(...allT) + 30;
+  // 取整到 30 分
+  t0 = Math.floor(t0/30)*30; t1 = Math.ceil(t1/30)*30;
+  const span = t1 - t0;
+  const pos = t => `${((t-t0)/span)*100}%`;
+  const wid = (a,b) => `${((b-a)/span)*100}%`;
+  let h = `<div class="gantt"><div style="font-size:11px;color:var(--mu);margin-bottom:6px;">时间轴（北京时间）</div>`;
+  // NOTAM 段
+  r.hits.forEach((hh, idx) => {
+    const e1 = hh.bMin, e2 = hh.eMin > hh.bMin ? hh.eMin : hh.eMin+1440;
+    h += `<div class="gantt-row">
+      <div class="glabel">${hh.notamId} #${hh.idx}</div>
+      <div class="gantt-track">
+        <div class="gantt-bar notam" style="left:${pos(e1)};width:${wid(e1,e2)};" title="禁航 ${fmtMin(e1)}~${fmtMin(e2,true)}">禁航</div>
+        <div class="gantt-bar window" style="left:${pos(hh.window[0])};width:${wid(hh.window[0],hh.window[1])};top:0;height:18px;opacity:.6;" title="禁飞窗口"></div>
+      </div>
+    </div>`;
+  });
+  // 计划起飞线
+  if (r.dep >= t0 && r.dep <= t1) {
+    h += `<div style="position:relative;height:0;"><div class="gantt-line" style="left:calc(130px + ${pos(r.dep)} * 1);height:${r.hits.length*34}px;top:-${r.hits.length*34}px;" data-label="起飞 ${fmtMin(r.dep)}"></div></div>`;
+  }
+  // 刻度
+  h += `<div class="gantt-axis">`;
+  const tickStep = span > 360 ? 60 : 30;
+  for (let t = Math.ceil(t0/tickStep)*tickStep; t <= t1; t += tickStep) {
+    h += `<div class="gantt-tick" style="left:${pos(t)};">${fmtMin(t,true)}</div>`;
+  }
+  h += `</div></div>`;
+  return h;
+}
+
+function buildReport() {
+  // 模仿用户原始输出风格
+  const lines = [];
+  lines.push('【禁航通告评估】');
+  const notamIds = parsedNotamBlocks.map(b => b.id).join('、');
+  lines.push(`根据通告 ${notamIds} 评估：`);
+  lines.push('');
+  calcResults.forEach((r, i) => {
+    const head = `${i+1}、${r.plan.callsign||r.plan.planNo}/${r.plan.acReg||''}（${r.plan.dep} ${fmtMin(r.dep)} → ${r.plan.arr}）`;
+    if (!r.merged.length) {
+      lines.push(`${head} 无禁飞窗口，正常放行。`);
+    } else if (r.inWin) {
+      const advWin = r.merged.find(([a,b]) => (r.dep>=a&&r.dep<=b)||(r.dep+1440>=a&&r.dep+1440<=b));
+      lines.push(`${head} 需在 ${fmtMin(advWin[0])} 之前 或 ${fmtMin(advWin[1],true)} 之后起飞。`);
+    } else {
+      lines.push(`${head} 计划起飞 ${fmtMin(r.dep)} 不在禁飞窗口（${r.merged.map(w=>`${fmtMin(w[0])}~${fmtMin(w[1],true)}`).join(' / ')}）内，正常放行。`);
+    }
+    if (r.plan._note) lines.push(`   备注：${r.plan._note}`);
+  });
+  lines.push('');
+  lines.push(`（裕度 ${calcResults[0]?.margin||15} 分钟，时间均为北京时间。）`);
+  return lines.join('\n');
+}
+
+function copyReport() {
+  const txt = document.getElementById('reportText').textContent;
+  navigator.clipboard.writeText(txt).then(()=>showToast('已复制结果摘要')).catch(()=>showToast('复制失败','error'));
+}
+
+/* ========================================================================
+   手动添加禁航段（一些 NOTAM 端点航路库没收录、或圆形禁航需手填等效点）
+   ======================================================================== */
+function addManualSeg() {
+  const notamId = prompt('归属 NOTAM 编号（如 C1149/26）');
+  if (!notamId) return;
+  const blk = parsedNotamBlocks.find(b => b.id.includes(notamId));
+  if (!blk) return showToast('NOTAM 编号不存在', 'error');
+  const aw = prompt('航路代码（如 W192）');
+  const a = prompt('进入点（如 P666）');
+  const b = prompt('离开点（如 BIKNO）');
+  if (!aw || !a || !b) return;
+  const ptA = cleanWaypointName(a), ptB = cleanWaypointName(b);
+  blk.segs.push({idx:'手动', airway:aw, ptA, ptB, allWaypoints:findWaypointsBetween(ptA,ptB), raw:'手动添加'});
+  doMatch();
+  renderNotamPreview();
+}
+
+/* ========================================================================
+   步骤切换
+   ======================================================================== */
+function goStep(n) {
+  currentStep = n;
+  for (let i=1;i<=5;i++) {
+    document.getElementById(`step${i}`).classList.toggle('hide', i!==n);
+    document.getElementById(`pill${i}`).classList.toggle('active', i===n);
+  }
+}
+function markStepDone(n) {
+  document.getElementById(`pill${n}`).classList.add('done');
+}
+
+function resetAll() {
+  if (!confirm('确定清空所有输入和结果？')) return;
+  parsedNotamBlocks = []; parsedPlans = []; manualSegs = []; calcResults = [];
+  document.getElementById('notamInput').value = '';
+  document.getElementById('cfpInput').value = '';
+  ['notamPreview','cfpPreview','matchPreview','planTimes','resultBody'].forEach(id=>document.getElementById(id).innerHTML='');
+  for (let i=1;i<=5;i++) document.getElementById(`pill${i}`).classList.remove('done');
+  goStep(1);
+}
+
+/* ========================================================================
+   示例数据（用真实表格 row 7 + row 5 混合）
+   ======================================================================== */
+const DEMO_NOTAM = `C0147/26 ZLHW
+B)2026/01/12 1735 C)2026/01/12 1810
+E)下列航路( 线) 段禁航:
+1.W192 航线 ( RUSDI - TUSLI ）段,
+2.B215 航线 ( NIXUK - NUKTI ）段,
+3.G470 航线 ( IBANO - BIKNO ）段,
+4.W191 航线 ( MOVBI - KARVI ) 段,
+5.W271 航线 ( NIXUK - TESEN ) 段,
+9.W66  航路 ( 磴口VOR''DKO'' - IDSIP ) 段,
+10.X130 航线 ( 巴彦浩特VOR''BHT'' - 桃来VOR''ETL'' ) 段.
+
+C0146/26 ZLHW
+B)2026/01/12 1005 C)2026/01/12 1040
+E)下列航路( 线) 段禁航:
+1.W192 航线 ( RUSDI - TUSLI ）段,
+2.B215 航线 ( NIXUK - NUKTI ）段,
+3.G470 航线 ( IBANO - BIKNO ）段.
+
+C0097/26 ZWUQ
+B)2026/01/12 1735 C)2026/01/12 1820
+E)下列航路( 线) 段禁航:
+1.G470 航路(BIKNO-AKLAS) 段,
+2.W191 航线(ESDEX-MOVBI) 段,
+3.W192 航线(ESDEX-RUSDI) 段.
+F)GND G)UNL
+
+C0096/26 ZWUQ
+B)2026/01/12 1005 C)2026/01/12 1144
+E)下列航路( 线) 段禁航:
+1.G470 航路(BIKNO-AKLAS) 段,
+2.W191 航线(ESDEX-MOVBI) 段,
+3.W192 航线(ESDEX-RUSDI) 段.
+F)GND G)UNL`;
+
+const DEMO_CFP = `PLAN 8742   ZGHA TO ZWTL  L320    25/F IFR   PERF:  +1.0    11/01/26
+NONSTOP COMPUTED 1426Z  FOR ETD 0055Z  PROGS  1106NWS  B322C    KGS
+
+CALLSIGN:  A67685
+
+           FUEL  TIME  DIST ARRIVE
+DEST ZWTL 009530 04/25 1707  0520Z
+
+ZGHA ELEV  00219FT
+CPT    FLT T   WIND  S  TAS MCS   AWY DST DSTR ETE  ETR  FU   FR    FF/E
+------------------------------------------------------------------------
+TOC    236 M20 26092 07 446 273 ..    042 1665 0008 0417 0737 12293 2621
+OLTUS  236 M20 26092 07 446 273 ..    037 1628 0007 0410 0263 12030 1272
+IPMUG  236 M21 26090 08 446 277 W226  004 1624 0000 0410 0028 12002 1265
+BIVAV  236 M21 26089 08 446 282 W611  013 1611 0002 0408 0092 11910 1268
+XOPEK  236 M21 26085 08 446 307 W138  025 1586 0004 0404 0167 11743 1267
+DOPNI  236 M22 26078 09 445 307 W138  025 1561 0004 0400 0164 11579 1264
+DYG    236 M24 26068 09 442 306 W138  048 1513 0008 0352 0307 11272 1250
+IGPAR  236 M25 26060 09 368 333 W139  027 1486 0004 0348 0145 11127 0916
+ENH    266 M32 26077 09 393 333 W139  056 1430 0010 0338 0347 10780 1094
+ENSOX  266 M33 27075 09 393 007 W102  006 1424 0001 0337 0029 10751 0934
+SOSNU  266 M34 27075 07 392 008 W102  026 1398 0004 0333 0123 10628 0933
+EMVIL  321 M47 26102 09 458 009 W102  084 1314 0012 0321 0461 10167 1108
+SHX    321 M47 27079 06 463 009 W102  100 1214 0013 0308 0459 09708 1055
+ZS     321 M49 28068 04 461 295 H14   058 1156 0009 0259 0308 09400 1047
+OLMEK  321 M50 29067 04 460 351 H142  014 1142 0002 0257 0069 09331 1042
+DOVOP  321 M51 29066 02 459 351 H142  019 1123 0003 0254 0093 09238 1037
+TEBIB  321 M51 30064 03 459 316 W541  054 1069 0008 0246 0283 08955 1039
+OVKAB  321 M52 30062 03 458 316 W541  013 1056 0002 0244 0068 08887 1037
+XFG    321 M52 31060 03 458 352 W94   017 1039 0002 0242 0086 08801 1035
+IDEBO  321 M52 31059 03 458 289 W213  017 1022 0003 0239 0088 08713 1036
+URBEB  321 M52 31058 02 458 290 W213  009 1013 0001 0238 0046 08667 1030
+P03    321 M52 31057 03 458 287 W213  021 0992 0003 0235 0107 08560 1035
+GUY    321 M52 32056 03 458 288 W213  024 0968 0004 0231 0121 08439 1032
+IDSUD  321 M52 32056 03 458 288 W213  052 0916 0008 0223 0263 08176 1034
+OVTIB  321 M51 32058 03 459 288 W213  023 0893 0003 0220 0116 08060 1034
+APESU  321 M51 32059 03 459 288 W213  020 0873 0003 0217 0101 07959 1034
+IDOPA  321 M51 32060 02 459 301 W197  017 0856 0002 0215 0088 07871 1036
+BUKPU  321 M51 32061 03 459 301 W197  041 0815 0007 0208 0212 07659 1035
+ANDIM  321 M51 32061 03 459 305 W197  048 0767 0007 0201 0249 07410 1035
+LELUX  321 M51 32063 04 459 287 B215  020 0747 0003 0158 0103 07307 1036
+LAXEV  321 M51 32065 02 459 286 B215  017 0730 0002 0156 0088 07219 1036
+P434   321 M51 32067 01 459 299 B215  020 0710 0003 0153 0104 07115 1031
+NOGEX  321 M51 32069 01 459 301 B215  022 0688 0004 0149 0116 06999 1034
+P407   321 M51 32069 01 459 300 B215  049 0639 0007 0142 0258 06741 1032
+OMGUP  321 M51 31070 01 459 300 B215  127 0512 0020 0122 0670 06071 1031
+IGDON  321 M51 31069 02 459 298 B215  031 0481 0004 0118 0163 05908 1031
+TODOD  321 M51 31067 02 459 298 B215  021 0460 0004 0114 0110 05798 1028
+P666   321 M51 31064 02 459 297 B215  051 0409 0007 0107 0265 05533 1029
+NIXUK  321 M51 30062 01 459 297 B215  025 0384 0004 0103 0130 05403 1028
+IBANO  321 M51 30062 01 459 297 B215  014 0370 0002 0101 0073 05330 1028
+BIKNO  321 M51 30061 02 459 308 G470  059 0311 0009 0052 0304 05026 1027
+AKLAS  256 M37 29052 03 432 309 G470  123 0188 0019 0033 0665 04361 1029
+LUPRO  256 M37 30053 03 432 315 W192  055 0133 0009 0024 0322 04039 1119
+UPKOT  256 M38 30054 03 431 300 W192  037 0096 0006 0018 0219 03820 1114
+TOD    256 M38 29056 03 431 299 W192  031 0065 0005 0013 0185 03635 1114
+KEXAB  216 M29 30054 04 409 299 W192  009 0056 0001 0012 0019 03616 0646
+PTG    073 P01 32011 02 277 198 J93   034 0022 0006 0006 0054 03562 0646
+ZWTL   009 P05 29002 01 233 264 ..    022 0000 0013 0000 0066 03500 0646
+`;
+
+function loadDemo() {
+  document.getElementById('notamInput').value = DEMO_NOTAM;
+  document.getElementById('cfpInput').value = DEMO_CFP;
+  doParseNotam();
+  setTimeout(()=>{
+    doParseCfp();
+    // 自动填起飞时间（08:55 长沙-吐鲁番）
+    setTimeout(()=>{
+      const inp = document.getElementById('dep_0');
+      if (inp) inp.value = '08:55';
+    }, 100);
+  }, 100);
+}
+
+</script>
+</body>
+</html>
