@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+.DS_Store
+.env
+.venv/
+venv/
+_私密_*.md
+*.usage_log.jsonl
+.streamlit/secrets.toml
